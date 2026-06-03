@@ -11,10 +11,13 @@ const PORT = 8080;
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-const PROJECTS_DIR = path.join('C:', 'Users', 'Win 10', '.gemini', 'config', 'projects');
-const BRAIN_DIR = path.join('C:', 'Users', 'Win 10', '.gemini', 'antigravity', 'brain');
+const os = require('os');
+
+const HOME_DIR = os.homedir();
+const PROJECTS_DIR = path.join(HOME_DIR, '.gemini', 'config', 'projects');
+const BRAIN_DIR = path.join(HOME_DIR, '.gemini', 'antigravity', 'brain');
 const LANGUAGE_SERVER_EXE = path.join(
-  'C:', 'Users', 'Win 10', 'AppData', 'Local', 'Programs',
+  HOME_DIR, 'AppData', 'Local', 'Programs',
   'Antigravity', 'resources', 'bin', 'language_server.exe'
 );
 
