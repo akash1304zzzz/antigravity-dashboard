@@ -539,6 +539,31 @@ app.get('/api/conversations/:id/artifacts', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /api/conversations/:id/artifacts/:filename
+// ---------------------------------------------------------------------------
+app.get('/api/conversations/:id/artifacts/:filename', (req, res) => {
+  try {
+    const { id, filename } = req.params;
+    if (!/^[a-f0-9-]+$/i.test(id)) {
+      return res.status(400).json({ error: 'Invalid conversation ID' });
+    }
+
+    // Basic path traversal prevention
+    const safeFilename = path.basename(filename);
+    const filePath = path.join(BRAIN_DIR, id, safeFilename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Artifact not found' });
+    }
+
+    res.download(filePath, safeFilename); // This will prompt download or open in browser depending on type
+  } catch (err) {
+    console.error('Error serving artifact file:', err);
+    res.status(500).json({ error: 'Failed to serve artifact', details: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/upload
 // ---------------------------------------------------------------------------
 app.post('/api/upload', (req, res) => {

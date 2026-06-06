@@ -403,11 +403,12 @@
             artifacts.forEach(art => {
                 const isImage = art.type === 'png' || art.type === 'jpg';
                 const preview = isImage ? '[Image]' : escapeHtml(truncate(art.content || '', 40));
+                const downloadUrl = `/api/conversations/${state.currentConversationId}/artifacts/${encodeURIComponent(art.name)}`;
                 html += `
-                    <div class="artifact-card" onclick="document.getElementById('artifacts-btn').click()" style="flex: 0 0 auto; width: 140px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px; cursor: pointer; transition: border-color 0.2s;">
+                    <a href="${downloadUrl}" target="_blank" class="artifact-card" style="text-decoration: none; flex: 0 0 auto; width: 140px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px; cursor: pointer; transition: border-color 0.2s;">
                         <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${art.name}</div>
                         <div style="font-size: 0.65rem; color: var(--text-tertiary); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${preview}</div>
-                    </div>`;
+                    </a>`;
             });
             html += `</div></div>`;
         }
@@ -795,17 +796,28 @@
                     }
                     
                     artifactsList.innerHTML = artifacts.map(art => {
+                        const downloadUrl = `/api/conversations/${state.currentConversationId}/artifacts/${encodeURIComponent(art.name)}`;
+                        const viewBtn = `<a href="${downloadUrl}" target="_blank" style="text-decoration: none; background: var(--accent-primary); color: white; padding: 4px 10px; border-radius: var(--radius-sm); font-size: 0.75rem;">View / Download</a>`;
+
                         if (art.type === 'png' || art.type === 'jpg') {
                             return `
                             <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden;">
-                                <div style="padding: 8px 12px; background: rgba(0,0,0,0.2); font-weight: 600; font-size: 0.8125rem; border-bottom: 1px solid var(--border-subtle);">${art.name}</div>
-                                <div style="padding: 12px; text-align: center;">[Image Preview Not Yet Supported in Web]</div>
+                                <div style="padding: 8px 12px; background: rgba(0,0,0,0.2); font-weight: 600; font-size: 0.8125rem; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+                                    ${art.name}
+                                    ${viewBtn}
+                                </div>
+                                <div style="padding: 12px; text-align: center;">
+                                    <img src="${downloadUrl}" style="max-width: 100%; border-radius: var(--radius-sm);" alt="${art.name}">
+                                </div>
                             </div>`;
                         }
                         
                         return `
                         <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden;">
-                            <div style="padding: 8px 12px; background: rgba(0,0,0,0.2); font-weight: 600; font-size: 0.8125rem; border-bottom: 1px solid var(--border-subtle);">${art.name}</div>
+                            <div style="padding: 8px 12px; background: rgba(0,0,0,0.2); font-weight: 600; font-size: 0.8125rem; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+                                ${art.name}
+                                ${viewBtn}
+                            </div>
                             <div style="padding: 12px; font-size: 0.8125rem; max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-family: var(--font-mono); color: var(--text-secondary);">${escapeHtml(art.content || '')}</div>
                         </div>`;
                     }).join('');
