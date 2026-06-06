@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    Antigravity 2.0 â€” Mobile Command Center
    Frontend Application Logic
    ============================================ */
@@ -23,11 +23,11 @@
     async function api(endpoint, options = {}) {
         const url = `/api${endpoint}`;
         const res = await fetch(url, {
-            …options,
+            ...options,
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': AUTH_HEADER,
-                …options.headers,
+                ...(options.headers || {}),
             },
         });
         if (!res.ok) {
