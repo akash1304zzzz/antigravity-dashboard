@@ -412,7 +412,7 @@
             html += `</div></div>`;
         }
 
-        html += [...steps].reverse().map(step => {
+        html += steps.map(step => {
             const content = cleanContent(step.content);
             if (!content) return '';
 
@@ -451,10 +451,13 @@
 
         els.chatMessages.innerHTML = html;
 
-        // Ensure we scroll to top to see the latest message
+        // Ensure we scroll to bottom to see the latest message
         setTimeout(() => {
-            els.chatMessages.scrollTop = 0;
+            els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
         }, 50);
+        setTimeout(() => {
+            els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+        }, 300); // Fallback for slower rendering/images
     }
 
     // --- Escape HTML ---
@@ -499,13 +502,8 @@
             Antigravity is thinking...
         `;
         
-        const firstMessage = els.chatMessages.querySelector('.message');
-        if (firstMessage) {
-            els.chatMessages.insertBefore(thinkingDiv, firstMessage);
-        } else {
-            els.chatMessages.appendChild(thinkingDiv);
-        }
-        els.chatMessages.scrollTop = 0;
+        els.chatMessages.appendChild(thinkingDiv);
+        els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 
         pollInterval = setInterval(async () => {
             if (state.currentConversationId !== id) {
@@ -538,13 +536,8 @@
             <div class="message-meta">Sending...</div>
         `;
         
-        const firstMessage = els.chatMessages.querySelector('.message');
-        if (firstMessage) {
-            els.chatMessages.insertBefore(msgDiv, firstMessage);
-        } else {
-            els.chatMessages.appendChild(msgDiv);
-        }
-        els.chatMessages.scrollTop = 0;
+        els.chatMessages.appendChild(msgDiv);
+        els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 
         try {
             await api(`/conversations/${state.currentConversationId}/message`, {
