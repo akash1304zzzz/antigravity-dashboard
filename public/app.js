@@ -304,7 +304,7 @@
                 const project = state.projectMap[c.projectId];
                 const extracted = extractTitleAndBody(c.firstMessage);
                 const title = c.title || extracted.title;
-                const body = c.firstMessage;
+                const body = c.lastMessage || c.firstMessage || 'No content';
                 return `
                     <div class="convo-card" onclick="window.appOpenConversation('${c.id}')">
                         <div class="convo-card-header">
@@ -414,10 +414,13 @@
             return '';
         }).filter(Boolean).join('');
 
-        // Scroll to bottom
-        requestAnimationFrame(() => {
+        // Scroll to bottom reliably
+        setTimeout(() => {
             els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
-        });
+        }, 50);
+        setTimeout(() => {
+            els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+        }, 300); // Fallback for slower rendering/images
     }
 
     // --- Escape HTML ---

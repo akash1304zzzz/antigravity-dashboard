@@ -106,7 +106,7 @@ function readFirstTranscriptLine(conversationId) {
   }
 }
 
-function getLastTranscriptTime(conversationId) {
+function getLastTranscriptTimeAndMessage(conversationId) {
   const transcriptPath = path.join(
     BRAIN_DIR, conversationId,
     '.system_generated', 'logs', 'transcript.jsonl'
@@ -116,9 +116,30 @@ function getLastTranscriptTime(conversationId) {
     const content = fs.readFileSync(transcriptPath, 'utf-8');
     const lines = content.trim().split('\n');
     if (lines.length === 0) return null;
-    const lastLine = lines[lines.length - 1];
-    const entry = JSON.parse(lastLine);
-    return entry.created_at || null;
+    
+    let lastTime = null;
+    let lastContent = null;
+    
+    // Read backwards to find the latest time and latest actual text content
+    for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        try {
+            const entry = JSON.parse(line);
+            if (!lastTime && entry.created_at) {
+                lastTime = entry.created_at;
+            }
+            if (!lastContent && entry.content && typeof entry.content === 'string') {
+                lastContent = stripXmlTags(entry.content).substring(0, 200);
+            }
+            if (lastTime && lastContent) break;
+        } catch (e) {}
+    }
+    
+    return {
+        updatedAt: lastTime,
+        lastMessage: lastContent
+    };
   } catch (err) {
     return null;
   }
@@ -301,14 +322,15 @@ app.get('/api/conversations', (_req, res) => {
 
       const id = entry.name;
       const summary = readFirstTranscriptLine(id);
-      const updatedAt = getLastTranscriptTime(id);
+      const lastInfo = getLastTranscriptTimeAndMessage(id);
       
       conversations.push({
         id,
         title: titles[id] || null,
         firstMessage: summary ? summary.firstMessage : null,
+        lastMessage: lastInfo ? lastInfo.lastMessage : null,
         createdAt: summary ? summary.createdAt : null,
-        updatedAt: updatedAt || (summary ? summary.createdAt : null),
+        updatedAt: (lastInfo && lastInfo.updatedAt) ? lastInfo.updatedAt : (summary ? summary.createdAt : null),
         projectId: null, // Fetched lazily by client
       });
     }
