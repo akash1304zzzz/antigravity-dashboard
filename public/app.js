@@ -1,5 +1,5 @@
-/* ============================================
-   Antigravity 2.0 â€” Mobile Command Center
+﻿/* ============================================
+   Antigravity 2.0 Ã¢â‚¬â€ Mobile Command Center
    Frontend Application Logic
    ============================================ */
 
@@ -89,12 +89,12 @@
         toast.className = `toast toast-${type}`;
 
         const icons = {
-            success: 'âœ“',
-            error: 'âœ•',
-            info: 'â„¹',
+            success: '✓',
+            error: '✕',
+            info: 'ℹ',
         };
 
-        toast.innerHTML = `<span>${icons[type] || 'â„¹'}</span><span>${message}</span>`;
+        toast.innerHTML = `<span>${icons[type] || 'ℹ'}</span><span>${message}</span>`;
         els.toastContainer.appendChild(toast);
 
         setTimeout(() => {
@@ -123,7 +123,7 @@
 
     // --- Time Formatting ---
     function formatTime(dateStr) {
-        if (!dateStr) return '';
+        if (!dateStr) return '📁';
         const date = new Date(dateStr);
         const now = new Date();
         const diff = now - date;
@@ -158,19 +158,19 @@
     function truncate(str, len = 120) {
         if (!str) return '';
         str = str.trim();
-        return str.length > len ? str.substring(0, len) + 'â€¦' : str;
+        return str.length > len ? str.substring(0, len) + '…' : str;
     }
 
     // --- Project Icon ---
     function getProjectEmoji(name) {
         const map = {
-            'antigravityphone': 'ðŸ“±',
-            'hms': 'ðŸ¥',
-            'yogaschoolsrishikesh': 'ðŸ§˜',
-            'khakara': 'ðŸª',
-            'instagram': 'ðŸ“¸',
-            'ai_audit': 'ðŸŽ™ï¸',
-            'understanding': 'ðŸ“š',
+            'antigravityphone': '📱',
+            'hms': '🏥',
+            'yogaschoolsrishikesh': '🧘',
+            'khakara': '🍪',
+            'instagram': '📸',
+            'ai_audit': '🎙️',
+            'understanding': '📚',
         };
         const lower = (name || '').toLowerCase();
         for (const [key, emoji] of Object.entries(map)) {
@@ -433,14 +433,14 @@
                 `;
 
                 if (step.thinking) {
-                    msgHtml += `<div class="message-thinking">ðŸ’­ ${escapeHtml(truncate(step.thinking, 300))}</div>`;
+                    msgHtml += `<div class="message-thinking">💭 ${escapeHtml(truncate(step.thinking, 300))}</div>`;
                 }
 
                 if (step.tool_calls && step.tool_calls.length > 0) {
                     const toolSummary = step.tool_calls.map(tc =>
                         `<span class="tool-call-name">${tc.name}</span>`
                     ).join(', ');
-                    msgHtml += `<div class="message-tool-calls">ðŸ”§ ${toolSummary}</div>`;
+                    msgHtml += `<div class="message-tool-calls">🔧 ${toolSummary}</div>`;
                 }
 
                 msgHtml += `<div class="message-meta">${formatDateTime(step.created_at)}</div></div>`;
@@ -554,7 +554,7 @@
                 method: 'POST',
                 body: JSON.stringify({ content }),
             });
-            msgDiv.querySelector('.message-meta').textContent = 'Sent âœ“';
+            msgDiv.querySelector('.message-meta').textContent = 'Sent ✓';
             
             // Poll for the agent's response
             pollForResponse(state.currentConversationId, currentStepCount + 2);
@@ -914,7 +914,7 @@
                 barsHtml += `<div class="quota-bar ${i < q.filled ? 'filled' : 'empty'}"></div>`;
             }
 
-            const warningHtml = q.warning ? `<span class="quota-warning" title="Quota empty">âš ï¸</span>` : '';
+            const warningHtml = q.warning ? `<span class="quota-warning" title="Quota empty">⚠️</span>` : '';
 
             return `
                 <div class="quota-item">
