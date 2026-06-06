@@ -199,6 +199,16 @@ function runAgentApi(args, parseJson = true, projectId = null) {
 // Routes
 // ---------------------------------------------------------------------------
 
+// Global Cache-Control middleware to prevent browser from caching API responses
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({
