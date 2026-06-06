@@ -35,6 +35,11 @@ function basicAuth(req, res, next) {
   // Allow health endpoint without auth
   if (req.path === '/health' || req.path === '/api/health') return next();
 
+  // Allow direct artifact downloads without auth since they use unguessable UUIDs and browser img/a tags can't send headers
+  if (req.path.match(/\/api\/conversations\/[a-f0-9-]+\/artifacts\/[^\/]+$/i)) {
+      return next();
+  }
+
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Basic ')) {
     res.set('WWW-Authenticate', 'Basic realm="Antigravity Dashboard"');
