@@ -36,7 +36,8 @@ function basicAuth(req, res, next) {
   if (req.path === '/health' || req.path === '/api/health') return next();
 
   // Allow direct artifact downloads without auth since they use unguessable UUIDs and browser img/a tags can't send headers
-  if (req.path.match(/\/api\/conversations\/[a-f0-9-]+\/artifacts\/[^\/]+$/i)) {
+  // Note: req.path has '/api' stripped off because of app.use('/api', basicAuth)
+  if (req.path.match(/^\/conversations\/[a-f0-9-]+\/artifacts\/[^\/]+$/i)) {
       return next();
   }
 
