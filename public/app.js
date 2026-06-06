@@ -1,5 +1,5 @@
-/* ============================================
-   Antigravity 2.0 — Mobile Command Center
+﻿/* ============================================
+   Antigravity 2.0 â€” Mobile Command Center
    Frontend Application Logic
    ============================================ */
 
@@ -23,11 +23,11 @@
     async function api(endpoint, options = {}) {
         const url = `/api${endpoint}`;
         const res = await fetch(url, {
-            ...options,
+            …options,
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': AUTH_HEADER,
-                ...options.headers,
+                …options.headers,
             },
         });
         if (!res.ok) {
@@ -89,12 +89,12 @@
         toast.className = `toast toast-${type}`;
 
         const icons = {
-            success: '✓',
-            error: '✕',
-            info: 'ℹ',
+            success: 'âœ“',
+            error: 'âœ•',
+            info: 'â„¹',
         };
 
-        toast.innerHTML = `<span>${icons[type] || 'ℹ'}</span><span>${message}</span>`;
+        toast.innerHTML = `<span>${icons[type] || 'â„¹'}</span><span>${message}</span>`;
         els.toastContainer.appendChild(toast);
 
         setTimeout(() => {
@@ -158,25 +158,25 @@
     function truncate(str, len = 120) {
         if (!str) return '';
         str = str.trim();
-        return str.length > len ? str.substring(0, len) + '…' : str;
+        return str.length > len ? str.substring(0, len) + 'â€¦' : str;
     }
 
     // --- Project Icon ---
     function getProjectEmoji(name) {
         const map = {
-            'antigravityphone': '📱',
-            'hms': '🏥',
-            'yogaschoolsrishikesh': '🧘',
-            'khakara': '🍪',
-            'instagram': '📸',
-            'ai_audit': '🎙️',
-            'understanding': '📚',
+            'antigravityphone': 'ðŸ“±',
+            'hms': 'ðŸ¥',
+            'yogaschoolsrishikesh': 'ðŸ§˜',
+            'khakara': 'ðŸª',
+            'instagram': 'ðŸ“¸',
+            'ai_audit': 'ðŸŽ™ï¸',
+            'understanding': 'ðŸ“š',
         };
         const lower = (name || '').toLowerCase();
         for (const [key, emoji] of Object.entries(map)) {
             if (lower.includes(key)) return emoji;
         }
-        return '📁';
+        return 'ðŸ“';
     }
 
     // --- Load Projects ---
@@ -219,7 +219,7 @@
         }).join('');
 
         // Modal dropdown
-        els.newConvoProject.innerHTML = '<option value="">Select a project...</option>' +
+        els.newConvoProject.innerHTML = '<option value="">Select a project…</option>' +
             projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
     }
 
@@ -266,7 +266,7 @@
         if (lines.length === 0) return { title: 'Conversation', body: '' };
         
         let title = lines[0];
-        if (title.length > 50) title = title.substring(0, 50) + '...';
+        if (title.length > 50) title = title.substring(0, 50) + '…';
         
         let body = text.substring(lines[0].length).trim();
         return { title, body: body || text };
@@ -433,14 +433,14 @@
                 `;
 
                 if (step.thinking) {
-                    msgHtml += `<div class="message-thinking">💭 ${escapeHtml(truncate(step.thinking, 300))}</div>`;
+                    msgHtml += `<div class="message-thinking">ðŸ’­ ${escapeHtml(truncate(step.thinking, 300))}</div>`;
                 }
 
                 if (step.tool_calls && step.tool_calls.length > 0) {
                     const toolSummary = step.tool_calls.map(tc =>
                         `<span class="tool-call-name">${tc.name}</span>`
                     ).join(', ');
-                    msgHtml += `<div class="message-tool-calls">🔧 ${toolSummary}</div>`;
+                    msgHtml += `<div class="message-tool-calls">ðŸ”§ ${toolSummary}</div>`;
                 }
 
                 msgHtml += `<div class="message-meta">${formatDateTime(step.created_at)}</div></div>`;
@@ -509,7 +509,7 @@
             <div class="splash-orbit" style="width: 14px; height: 14px;">
                 <div class="orbit-core" style="width: 4px; height: 4px;"></div>
             </div>
-            Antigravity is thinking...
+            Antigravity is thinking…
         `;
         
         els.chatMessages.appendChild(thinkingDiv);
@@ -543,7 +543,7 @@
         msgDiv.className = 'message message-user';
         msgDiv.innerHTML = `
             <div>${escapeHtml(content)}</div>
-            <div class="message-meta">Sending...</div>
+            <div class="message-meta">Sending…</div>
         `;
         
         els.chatMessages.appendChild(msgDiv);
@@ -554,7 +554,7 @@
                 method: 'POST',
                 body: JSON.stringify({ content }),
             });
-            msgDiv.querySelector('.message-meta').textContent = 'Sent ✓';
+            msgDiv.querySelector('.message-meta').textContent = 'Sent âœ“';
             
             // Poll for the agent's response
             pollForResponse(state.currentConversationId, currentStepCount + 2);
@@ -591,7 +591,7 @@
             <div class="splash-orbit" style="width: 16px; height: 16px;">
                 <div class="orbit-core" style="width: 6px; height: 6px;"></div>
             </div>
-            Launching...
+            Launching…
         `;
 
         try {
@@ -653,7 +653,7 @@
             <div class="splash-orbit" style="width: 16px; height: 16px;">
                 <div class="orbit-core" style="width: 6px; height: 6px;"></div>
             </div>
-            Adding...
+            Adding…
         `;
 
         try {
@@ -786,7 +786,7 @@
             artifactsBtn.addEventListener('click', async () => {
                 if (!state.currentConversationId) return;
                 artifactsModal.classList.remove('hidden');
-                artifactsList.innerHTML = '<div style="text-align: center; color: var(--text-tertiary); padding: 20px;">Loading artifacts...</div>';
+                artifactsList.innerHTML = '<div style="text-align: center; color: var(--text-tertiary); padding: 20px;">Loading artifacts…</div>';
                 
                 try {
                     const artifacts = await api(`/conversations/${state.currentConversationId}/artifacts`);
@@ -914,7 +914,7 @@
                 barsHtml += `<div class="quota-bar ${i < q.filled ? 'filled' : 'empty'}"></div>`;
             }
 
-            const warningHtml = q.warning ? `<span class="quota-warning" title="Quota empty">⚠️</span>` : '';
+            const warningHtml = q.warning ? `<span class="quota-warning" title="Quota empty">âš ï¸</span>` : '';
 
             return `
                 <div class="quota-item">

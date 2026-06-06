@@ -1,5 +1,5 @@
-/* ============================================
-   Antigravity 2.0 — Mobile Command Center
+﻿/* ============================================
+   Antigravity 2.0 Ã¢â‚¬â€ Mobile Command Center
    Design System & Styles
    ============================================ */
 
@@ -373,7 +373,7 @@ body {
     padding: 10px 12px;
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color, border-color, color, transform, opacity, box-shadow var(--transition-fast);
     border: 1px solid transparent;
     text-decoration: none;
     color: var(--text-secondary);
@@ -398,7 +398,7 @@ body {
     opacity: 0.6;
 }
 
-.nav-item-text {
+.nav-item-text { min-width: 0;
     flex: 1;
     white-space: nowrap;
     overflow: hidden;
@@ -430,7 +430,7 @@ body {
     font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color, border-color, color, transform, opacity, box-shadow var(--transition-fast);
     text-decoration: none;
     outline: none;
 }
@@ -477,7 +477,7 @@ body {
     color: var(--text-secondary);
     cursor: pointer;
     border-radius: var(--radius-md);
-    transition: all var(--transition-fast);
+    transition: background-color, border-color, color, transform, opacity, box-shadow var(--transition-fast);
 }
 
 .icon-btn:hover {
@@ -573,7 +573,7 @@ body {
     flex-direction: column;
     gap: 12px;
     border: 1px solid var(--border-subtle);
-    transition: all var(--transition-normal);
+    transition: background-color, border-color, color, transform, opacity, box-shadow var(--transition-normal);
 }
 
 .stat-card:hover {
@@ -659,7 +659,7 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color, border-color, color, transform, opacity, box-shadow var(--transition-fast);
 }
 
 .convo-card:hover {
@@ -712,7 +712,7 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color, border-color, color, transform, opacity, box-shadow var(--transition-fast);
     position: relative;
     overflow: hidden;
 }
@@ -922,7 +922,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all var(--transition-fast);
+    transition: background-color, border-color, color, transform, opacity, box-shadow var(--transition-fast);
     flex-shrink: 0;
 }
 
@@ -1416,7 +1416,7 @@ input:checked + .slider:before {
     justify-content: center;
     cursor: pointer;
     flex-shrink: 0;
-    transition: all var(--transition-fast);
+    transition: background-color, border-color, color, transform, opacity, box-shadow var(--transition-fast);
 }
 .send-btn:disabled {
     background: var(--bg-tertiary);
@@ -1457,4 +1457,22 @@ textarea#message-input::placeholder {
     0% { opacity: 0.6; }
     50% { opacity: 1; }
     100% { opacity: 0.6; }
+}
+
+/* --- Web Guidelines Enhancements --- */
+h1, h2, h3, h4, .page-title, .section-title {
+    text-wrap: balance;
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+a:focus:not(:focus-visible), 
+button:focus:not(:focus-visible), 
+input:focus:not(:focus-visible), 
+select:focus:not(:focus-visible), 
+textarea:focus:not(:focus-visible) {
+    outline: none;
 }
