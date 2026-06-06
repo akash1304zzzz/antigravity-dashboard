@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    Antigravity 2.0 Ã¢â‚¬â€ Mobile Command Center
    Frontend Application Logic
    ============================================ */
@@ -123,7 +123,7 @@
 
     // --- Time Formatting ---
     function formatTime(dateStr) {
-        if (!dateStr) return '📁';
+        if (!dateStr) return '';
         const date = new Date(dateStr);
         const now = new Date();
         const diff = now - date;
@@ -176,7 +176,7 @@
         for (const [key, emoji] of Object.entries(map)) {
             if (lower.includes(key)) return emoji;
         }
-        return 'ðŸ“';
+        return '📁';
     }
 
     // --- Load Projects ---
