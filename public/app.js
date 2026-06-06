@@ -351,8 +351,11 @@
         `;
 
         try {
-            const steps = await api(`/conversations/${id}`);
-            renderMessages(steps);
+            const [steps, artifacts] = await Promise.all([
+                api(`/conversations/${id}`),
+                api(`/conversations/${id}/artifacts`).catch(() => [])
+            ]);
+            renderMessages(steps, artifacts);
         } catch (err) {
             console.error('Failed to load conversation:', err);
             els.chatMessages.innerHTML = `
@@ -364,7 +367,7 @@
         }
     }
 
-    function renderMessages(steps) {
+    function renderMessages(steps, artifacts = []) {
         currentStepCount = steps ? steps.length : 0;
         if (!steps || steps.length === 0) {
             els.chatMessages.innerHTML = `
@@ -380,7 +383,36 @@
             return;
         }
 
-        els.chatMessages.innerHTML = steps.map(step => {
+        let html = '';
+
+        // Render inline artifacts if any
+        if (artifacts && artifacts.length > 0) {
+            html += `<div class="inline-artifacts-container" style="padding: 12px; margin-bottom: 16px; background: rgba(0,0,0,0.2); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">
+                <div style="font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    Generated Artifacts (${artifacts.length})
+                </div>
+                <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;">`;
+                
+            artifacts.forEach(art => {
+                const isImage = art.type === 'png' || art.type === 'jpg';
+                const preview = isImage ? '[Image]' : escapeHtml(truncate(art.content || '', 40));
+                html += `
+                    <div class="artifact-card" onclick="document.getElementById('artifacts-btn').click()" style="flex: 0 0 auto; width: 140px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px; cursor: pointer; transition: border-color 0.2s;">
+                        <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${art.name}</div>
+                        <div style="font-size: 0.65rem; color: var(--text-tertiary); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${preview}</div>
+                    </div>`;
+            });
+            html += `</div></div>`;
+        }
+
+        html += [...steps].reverse().map(step => {
             const content = cleanContent(step.content);
             if (!content) return '';
 
@@ -394,36 +426,35 @@
             }
 
             if (step.type === 'PLANNER_RESPONSE') {
-                let html = `
+                let msgHtml = `
                     <div class="message message-assistant">
                         <div>${formatMarkdown(content)}</div>
                 `;
 
                 if (step.thinking) {
-                    html += `<div class="message-thinking">💭 ${escapeHtml(truncate(step.thinking, 300))}</div>`;
+                    msgHtml += `<div class="message-thinking">💭 ${escapeHtml(truncate(step.thinking, 300))}</div>`;
                 }
 
                 if (step.tool_calls && step.tool_calls.length > 0) {
                     const toolSummary = step.tool_calls.map(tc =>
                         `<span class="tool-call-name">${tc.name}</span>`
                     ).join(', ');
-                    html += `<div class="message-tool-calls">🔧 ${toolSummary}</div>`;
+                    msgHtml += `<div class="message-tool-calls">🔧 ${toolSummary}</div>`;
                 }
 
-                html += `<div class="message-meta">${formatDateTime(step.created_at)}</div></div>`;
-                return html;
+                msgHtml += `<div class="message-meta">${formatDateTime(step.created_at)}</div></div>`;
+                return msgHtml;
             }
 
             return '';
         }).filter(Boolean).join('');
 
-        // Scroll to bottom reliably
+        els.chatMessages.innerHTML = html;
+
+        // Ensure we scroll to top to see the latest message
         setTimeout(() => {
-            els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+            els.chatMessages.scrollTop = 0;
         }, 50);
-        setTimeout(() => {
-            els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
-        }, 300); // Fallback for slower rendering/images
     }
 
     // --- Escape HTML ---
@@ -467,8 +498,14 @@
             </div>
             Antigravity is thinking...
         `;
-        els.chatMessages.appendChild(thinkingDiv);
-        els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+        
+        const firstMessage = els.chatMessages.querySelector('.message');
+        if (firstMessage) {
+            els.chatMessages.insertBefore(thinkingDiv, firstMessage);
+        } else {
+            els.chatMessages.appendChild(thinkingDiv);
+        }
+        els.chatMessages.scrollTop = 0;
 
         pollInterval = setInterval(async () => {
             if (state.currentConversationId !== id) {
@@ -479,7 +516,8 @@
                 const steps = await api(`/conversations/${id}`);
                 if (steps.length >= expectedCount) {
                     clearInterval(pollInterval);
-                    renderMessages(steps);
+                    const artifacts = await api(`/conversations/${id}/artifacts`).catch(() => []);
+                    renderMessages(steps, artifacts);
                 }
             } catch (e) {}
         }, 2000);
@@ -499,8 +537,14 @@
             <div>${escapeHtml(content)}</div>
             <div class="message-meta">Sending...</div>
         `;
-        els.chatMessages.appendChild(msgDiv);
-        els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+        
+        const firstMessage = els.chatMessages.querySelector('.message');
+        if (firstMessage) {
+            els.chatMessages.insertBefore(msgDiv, firstMessage);
+        } else {
+            els.chatMessages.appendChild(msgDiv);
+        }
+        els.chatMessages.scrollTop = 0;
 
         try {
             await api(`/conversations/${state.currentConversationId}/message`, {
