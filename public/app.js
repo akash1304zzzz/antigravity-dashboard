@@ -449,15 +449,24 @@
             return '';
         }).filter(Boolean).join('');
 
+        html += `<div id="chat-anchor" style="height: 1px;"></div>`;
         els.chatMessages.innerHTML = html;
 
         // Ensure we scroll to bottom to see the latest message
-        setTimeout(() => {
-            els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
-        }, 50);
-        setTimeout(() => {
-            els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
-        }, 300); // Fallback for slower rendering/images
+        const scrollToBottom = () => {
+            const anchor = document.getElementById('chat-anchor');
+            if (anchor) {
+                anchor.scrollIntoView({ behavior: 'auto', block: 'end' });
+            } else {
+                els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+            }
+        };
+
+        requestAnimationFrame(() => {
+            scrollToBottom();
+            setTimeout(scrollToBottom, 100);
+            setTimeout(scrollToBottom, 500);
+        });
     }
 
     // --- Escape HTML ---
