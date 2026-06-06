@@ -331,6 +331,9 @@
         els.pageTitle.textContent = title;
         const project = state.projectMap[convo?.projectId];
         els.pageSubtitle.textContent = project ? project.name : '';
+        
+        const artBtn = document.getElementById('artifacts-btn');
+        if (artBtn) artBtn.style.display = 'flex';
 
         // Update sidebar active state
         document.querySelectorAll('.nav-item[data-convo-id]').forEach(el => {
@@ -676,6 +679,10 @@
         state.currentProjectId = null;
         els.pageTitle.textContent = 'Dashboard';
         els.pageSubtitle.textContent = '';
+        
+        const artBtn = document.getElementById('artifacts-btn');
+        if (artBtn) artBtn.style.display = 'none';
+
         switchView('dashboard');
         renderConversations();
 
@@ -721,6 +728,53 @@
         els.newProjectModal.addEventListener('click', (e) => {
             if (e.target === els.newProjectModal) closeNewProjectModal();
         });
+
+        // --- Artifacts Logic ---
+        const artifactsBtn = document.getElementById('artifacts-btn');
+        const artifactsModal = document.getElementById('artifacts-modal');
+        const artifactsCloseBtn = document.getElementById('artifacts-close-btn');
+        const artifactsList = document.getElementById('artifacts-list');
+
+        if (artifactsBtn && artifactsModal) {
+            artifactsBtn.addEventListener('click', async () => {
+                if (!state.currentConversationId) return;
+                artifactsModal.classList.remove('hidden');
+                artifactsList.innerHTML = '<div style="text-align: center; color: var(--text-tertiary); padding: 20px;">Loading artifacts...</div>';
+                
+                try {
+                    const artifacts = await api(`/conversations/${state.currentConversationId}/artifacts`);
+                    if (!artifacts || artifacts.length === 0) {
+                        artifactsList.innerHTML = '<div style="text-align: center; color: var(--text-tertiary); padding: 20px;">No artifacts found for this conversation.</div>';
+                        return;
+                    }
+                    
+                    artifactsList.innerHTML = artifacts.map(art => {
+                        if (art.type === 'png' || art.type === 'jpg') {
+                            return `
+                            <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden;">
+                                <div style="padding: 8px 12px; background: rgba(0,0,0,0.2); font-weight: 600; font-size: 0.8125rem; border-bottom: 1px solid var(--border-subtle);">${art.name}</div>
+                                <div style="padding: 12px; text-align: center;">[Image Preview Not Yet Supported in Web]</div>
+                            </div>`;
+                        }
+                        
+                        return `
+                        <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden;">
+                            <div style="padding: 8px 12px; background: rgba(0,0,0,0.2); font-weight: 600; font-size: 0.8125rem; border-bottom: 1px solid var(--border-subtle);">${art.name}</div>
+                            <div style="padding: 12px; font-size: 0.8125rem; max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-family: var(--font-mono); color: var(--text-secondary);">${escapeHtml(art.content || '')}</div>
+                        </div>`;
+                    }).join('');
+                } catch (e) {
+                    artifactsList.innerHTML = `<div style="color: var(--error); padding: 20px; text-align: center;">Error loading artifacts: ${e.message}</div>`;
+                }
+            });
+
+            artifactsCloseBtn.addEventListener('click', () => {
+                artifactsModal.classList.add('hidden');
+            });
+            artifactsModal.addEventListener('click', (e) => {
+                if (e.target === artifactsModal) artifactsModal.classList.add('hidden');
+            });
+        }
 
         // Quota Toggle
         const quotaToggle = document.getElementById('quota-toggle');

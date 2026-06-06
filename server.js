@@ -489,6 +489,46 @@ app.post('/api/conversations/:id/message', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /api/conversations/:id/artifacts
+// ---------------------------------------------------------------------------
+app.get('/api/conversations/:id/artifacts', (req, res) => {
+  try {
+    const conversationId = req.params.id;
+    if (!/^[a-f0-9-]+$/i.test(conversationId)) {
+      return res.status(400).json({ error: 'Invalid conversation ID format' });
+    }
+
+    const dirPath = path.join(BRAIN_DIR, conversationId);
+    if (!fs.existsSync(dirPath)) {
+      return res.json([]);
+    }
+
+    const files = fs.readdirSync(dirPath, { withFileTypes: true });
+    const artifacts = [];
+
+    for (const file of files) {
+      if (file.isDirectory() && file.name !== '.system_generated' && file.name !== 'scratch') {
+        continue;
+      }
+      if (file.isFile() && (file.name.endsWith('.md') || file.name.endsWith('.png') || file.name.endsWith('.jpg') || file.name.endsWith('.json'))) {
+         // skip hidden files
+         if (file.name.startsWith('.')) continue;
+         const content = file.name.endsWith('.md') ? fs.readFileSync(path.join(dirPath, file.name), 'utf-8') : null;
+         artifacts.push({
+           name: file.name,
+           type: file.name.split('.').pop(),
+           content: content
+         });
+      }
+    }
+    res.json(artifacts);
+  } catch (err) {
+    console.error('Error fetching artifacts:', err);
+    res.status(500).json({ error: 'Failed to fetch artifacts', details: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/upload
 // ---------------------------------------------------------------------------
 app.post('/api/upload', (req, res) => {
