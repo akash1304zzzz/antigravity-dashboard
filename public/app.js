@@ -433,14 +433,12 @@
                 `;
 
                 if (step.thinking) {
-                    msgHtml += `<div class="message-thinking">💭 ${escapeHtml(truncate(step.thinking, 300))}</div>`;
+                    msgHtml += `<details class="message-thinking"><summary>💭 Thinking…</summary><div>${escapeHtml(step.thinking)}</div></details>`;
                 }
 
                 if (step.tool_calls && step.tool_calls.length > 0) {
-                    const toolSummary = step.tool_calls.map(tc =>
-                        `<span class="tool-call-name">${tc.name}</span>`
-                    ).join(', ');
-                    msgHtml += `<div class="message-tool-calls">🔧 ${toolSummary}</div>`;
+                    const toolSummary = step.tool_calls.map(tc => `<span class="tool-call-name">${tc.name}</span>`).join(', ');
+                    msgHtml += `<details class="message-tool-calls"><summary>🔧 Tools: ${toolSummary}</summary><div>${escapeHtml(JSON.stringify(step.tool_calls, null, 2))}</div></details>`;
                 }
 
                 msgHtml += `<div class="message-meta">${formatDateTime(step.created_at)}</div></div>`;

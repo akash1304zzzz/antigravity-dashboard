@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="index.css?v=3.0">
+    <link rel="stylesheet" href="index.css?v=3.8">
 </head>
 <body>
     <!-- Splash Screen -->
@@ -223,6 +223,11 @@
                         </div>
                     </div>
                     <div class="chat-input-bar">
+                        <div id="quick-actions-bar" style="display: flex; gap: 8px; margin-bottom: 8px; overflow-x: auto; padding-bottom: 4px;">
+                            <button class="btn btn-ghost quick-action-btn" onclick="document.getElementById('message-input').value='Allow'; document.getElementById('send-btn').click();" style="padding: 4px 10px; font-size: 0.75rem; background: rgba(0, 255, 128, 0.1); color: #4ade80; border: 1px solid #4ade80;">✓ Allow</button>
+                            <button class="btn btn-ghost quick-action-btn" onclick="document.getElementById('message-input').value='Deny'; document.getElementById('send-btn').click();" style="padding: 4px 10px; font-size: 0.75rem; background: rgba(255, 0, 0, 0.1); color: #f87171; border: 1px solid #f87171;">✕ Deny</button>
+                            <button class="btn btn-ghost quick-action-btn" onclick="document.getElementById('message-input').value='Stop current generation / Cancel task'; document.getElementById('send-btn').click();" style="padding: 4px 10px; font-size: 0.75rem; background: rgba(255, 165, 0, 0.1); color: #fbbf24; border: 1px solid #fbbf24;">⏹ Stop</button>
+                        </div>
                         <div class="chat-input-header">
                             <select id="chat-model-select" class="chat-model-select">
                                 <option value="flash">Flash (Fast)</option>
@@ -352,6 +357,6 @@
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
-    <script src="app.js?v=3.7"></script>
+    <script src="app.js?v=3.8"></script>
 </body>
 </html>

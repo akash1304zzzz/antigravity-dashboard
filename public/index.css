@@ -1476,3 +1476,8 @@ select:focus:not(:focus-visible),
 textarea:focus:not(:focus-visible) {
     outline: none;
 }
+
+/* Expandable Blocks */
+details.message-thinking, details.message-tool-calls { background: rgba(0,0,0,0.15); border-radius: var(--radius-md); padding: 8px 12px; margin-bottom: 8px; font-size: 0.8125rem; border: 1px solid var(--border-subtle); }
+details > summary { cursor: pointer; font-weight: 600; color: var(--text-secondary); opacity: 0.9; user-select: none; list-style-type: none; display: flex; align-items: center; gap: 6px; }
+details > div { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1); font-family: var(--font-mono); font-size: 0.75rem; white-space: pre-wrap; overflow-x: auto; color: var(--text-tertiary); max-height: 300px; overflow-y: auto; }
