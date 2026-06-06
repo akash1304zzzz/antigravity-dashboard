@@ -1,5 +1,5 @@
 /* ============================================
-   Antigravity 2.0 Ã¢â‚¬â€ Mobile Command Center
+   Antigravity 2.0 — Mobile Command Center
    Frontend Application Logic
    ============================================ */
 
