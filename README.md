@@ -1,0 +1,87 @@
+# Antigravity 2.0 — Mobile Command Center & Dashboard
+
+A web-based dashboard and remote access gateway that allows you to monitor, control, and interact with your Antigravity AI coding agents from anywhere, including your mobile devices.
+
+---
+
+## Prerequisites
+
+Before starting the project in a new environment, make sure you have the following installed and configured:
+
+1. **Node.js (v16.0.0 or higher)**:
+   - Used to run the Express backend server.
+   - Verify installation: `node -v`
+
+2. **PowerShell (v5.1 or Core)**:
+   - Required on Windows to run the startup script and networking helpers that bind to your local Wi-Fi IP address.
+
+3. **ttyd (Web Terminal Server)**:
+   - Required to run the secure remote web terminal.
+   - The command `ttyd` must be available in your system path.
+   - **How to install on Windows**:
+     - Using Scoop: `scoop install ttyd`
+     - Or download the binary from the [ttyd release page](https://github.com/tsl0922/ttyd/releases), rename it to `ttyd.exe`, and add it to your system PATH.
+
+4. **Antigravity CLI & Daemon (`language_server.exe`)**:
+   - The backend discovers the active agent environment variables or scans active daemon configs under `~/.gemini/antigravity/daemon/ls_*.json`.
+   - The CLI binary `language_server.exe` must be located at:
+     `C:\Users\<YourUsername>\AppData\Local\Programs\Antigravity\resources\bin\language_server.exe`
+     *(This is the default path where the Antigravity system installs it).*
+
+---
+
+## Installation & Setup
+
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/akash1304zzzz/antigravity-dashboard.git
+   cd antigravity-dashboard
+   ```
+
+2. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+
+---
+
+## Running the Application
+
+To start both the Node server and the remote mobile terminal simultaneously, run:
+
+```bash
+# Double-click the batch file or run it via command line
+start-all.bat
+```
+
+This launches two processes in separate command prompt windows:
+1. **Express Backend**: Runs on `http://localhost:8080`.
+2. **ttyd Terminal Server**: Runs on `http://<your-wifi-ip-address>:7681`.
+
+### Accessing the Dashboard & Terminal
+
+#### 1. Local Dashboard
+- URL: `http://localhost:8080`
+- Access the UI to view active projects, list conversations, view agent thinking, and access artifacts.
+
+#### 2. Mobile Remote Terminal
+- URL: `http://<your-wifi-ip-address>:7681` (Printed in the PowerShell window when starting).
+- Enables command execution and direct console terminal sharing over your local Wi-Fi.
+
+#### 3. Security Credentials (Basic Auth)
+Both the web server API endpoints and the remote terminal are protected by HTTP Basic Authentication. Use the following default credentials to sign in:
+* **Username**: `admin`
+* **Password**: `AntiGravity2025!`
+
+---
+
+## Project Structure
+
+* `server.js` - Express backend server providing REST API endpoints.
+* `public/` - Single-page application frontend.
+  * `index.html` - Dashboard HTML layout.
+  * `index.css` - Custom styling theme.
+  * `app.js` - Frontend logic, communication with server, and reactive elements.
+* `start-all.bat` - Runs both Express backend and the remote terminal.
+* `start-ttyd.ps1` - PowerShell script resolving local Wi-Fi IPs and launching the secure `ttyd` server.
+* `docs/` - Product design and feature specifications documents.

@@ -10,7 +10,7 @@
 #        or: powershell -File start-ttyd.ps1
 # ============================================
 
-$PORT = 8080
+$PORT = 7681
 $USERNAME = "admin"
 $PASSWORD = "AntiGravity2025!"
 

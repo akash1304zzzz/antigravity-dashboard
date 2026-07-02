@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { execFileSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
 
 const app = express();
 const PORT = 8080;
@@ -62,6 +62,99 @@ app.use('/api', basicAuth);
 
 // Serve static files from public/
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ---------------------------------------------------------------------------
+// Language Server Discovery & Process Verification Helpers
+// ---------------------------------------------------------------------------
+
+function isPidRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === 'EPERM';
+  }
+}
+
+let envLsPidCache = {
+  pid: null,
+  port: null,
+  lastChecked: 0
+};
+
+function getPidForPort(port) {
+  try {
+    const output = execSync('netstat -ano -p tcp', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+    const lines = output.split('\n');
+    for (const line of lines) {
+      if (line.includes(`:${port}`) && line.includes('LISTENING')) {
+        const parts = line.trim().split(/\s+/);
+        const pid = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(pid) && pid > 0) {
+          return pid;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Discovery] Error running netstat to find PID for port:', err.message);
+  }
+  return null;
+}
+
+function getActiveLanguageServer() {
+  // 1. High priority: check environment variables (e.g. from active IDE session)
+  if (process.env.ANTIGRAVITY_LS_ADDRESS && process.env.ANTIGRAVITY_CSRF_TOKEN) {
+    const address = process.env.ANTIGRAVITY_LS_ADDRESS;
+    const token = process.env.ANTIGRAVITY_CSRF_TOKEN;
+    const portMatch = address.match(/:(\d+)$/);
+    if (portMatch) {
+      const port = parseInt(portMatch[1], 10);
+      const now = Date.now();
+      
+      // Use cached PID if it matches the port and is verified within the last 5 seconds
+      if (envLsPidCache.port === port && envLsPidCache.pid && (now - envLsPidCache.lastChecked < 5000)) {
+        if (isPidRunning(envLsPidCache.pid)) {
+          return {
+            address,
+            token,
+            pid: envLsPidCache.pid
+          };
+        }
+      }
+      
+      // Resolve/verify the PID from the port
+      const pid = getPidForPort(port);
+      if (pid) {
+        envLsPidCache = { pid, port, lastChecked: now };
+        return { address, token, pid };
+      }
+    }
+  }
+  
+  // 2. Fallback: discover from ls_*.json files in daemon directory
+  const daemonDir = path.join(os.homedir(), '.gemini', 'antigravity', 'daemon');
+  if (fs.existsSync(daemonDir)) {
+    const files = fs.readdirSync(daemonDir).filter(f => f.startsWith('ls_') && f.endsWith('.json'));
+    for (const file of files) {
+      try {
+        const raw = fs.readFileSync(path.join(daemonDir, file), 'utf8');
+        const lsInfo = JSON.parse(raw);
+        if (lsInfo.pid && lsInfo.httpPort && lsInfo.csrfToken) {
+          if (isPidRunning(lsInfo.pid)) {
+            return {
+              address: `localhost:${lsInfo.httpPort}`,
+              token: lsInfo.csrfToken,
+              pid: lsInfo.pid
+            };
+          }
+        }
+      } catch (err) {
+        // ignore malformed files
+      }
+    }
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -183,10 +276,17 @@ function runAgentApi(args, parseJson = true, projectId = null) {
     encoding: 'utf-8',
     timeout: 30000,
     windowsHide: true,
+    env: { ...process.env }
   };
 
+  const activeLS = getActiveLanguageServer();
+  if (activeLS) {
+    options.env.ANTIGRAVITY_LS_ADDRESS = activeLS.address;
+    options.env.ANTIGRAVITY_CSRF_TOKEN = activeLS.token;
+  }
+
   if (projectId) {
-    options.env = { ...process.env, ANTIGRAVITY_PROJECT_ID: projectId };
+    options.env.ANTIGRAVITY_PROJECT_ID = projectId;
   }
 
   const result = execFileSync(LANGUAGE_SERVER_EXE, args, options);
