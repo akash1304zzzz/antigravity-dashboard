@@ -46,4 +46,18 @@ Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Launch ttyd
-ttyd -W -p $PORT -c "${USERNAME}:${PASSWORD}" powershell
+$ttydPath = "ttyd"
+if (-not (Get-Command ttyd -ErrorAction SilentlyContinue)) {
+    $wingetPath = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\tsl0922.ttyd_Microsoft.Winget.Source_8wekyb3d8bbwe\ttyd.exe"
+    if (Test-Path $wingetPath) {
+        $ttydPath = $wingetPath
+    } else {
+        # Fallback to search any ttyd.exe in WinGet Packages directory
+        $searchedPath = Get-ChildItem -Path "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Filter ttyd.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($searchedPath) {
+            $ttydPath = $searchedPath.FullName
+        }
+    }
+}
+
+& $ttydPath -W -p $PORT -c "${USERNAME}:${PASSWORD}" powershell

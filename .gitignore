@@ -4,3 +4,4 @@ uploads/
 desktop.ini
 **/desktop.ini
 *.log
+dashboard-config.json

@@ -133,6 +133,12 @@
                         <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                     </svg>
                 </button>
+                <button id="settings-btn" class="icon-btn" aria-label="Settings" title="Telegram Settings">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
             </header>
 
             <!-- Views Container -->
@@ -350,6 +356,48 @@
             </div>
             <div class="modal-body" id="artifacts-list" style="overflow-y: auto; flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
                 <!-- Artifacts will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay hidden">
+        <div class="modal glass" style="max-width: 500px; width: 95%;">
+            <div class="modal-header">
+                <h2>Telegram Notifications</h2>
+                <button id="settings-close-btn" class="icon-btn" aria-label="Close">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="settings-bot-token">Telegram Bot Token</label>
+                    <input type="text" id="settings-bot-token" class="form-textarea" placeholder="e.g. 123456:ABC..." style="height: auto; padding: 10px;">
+                </div>
+                <div class="form-group">
+                    <label for="settings-chat-id">Telegram Chat ID</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="settings-chat-id" class="form-textarea" placeholder="e.g. 123456789" style="height: auto; padding: 10px; flex: 1;">
+                        <button id="settings-discover-btn" class="btn btn-secondary" style="white-space: nowrap; padding: 0 12px; font-size: 0.85rem;" title="Listen for a message sent to your bot to auto-discover Chat ID">Auto Discover</button>
+                    </div>
+                    <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; display: block;">
+                        Don't know your chat ID? Send a message or /start command to your bot on Telegram, then click <b>Auto Discover</b>.
+                    </span>
+                </div>
+                
+                <div class="form-group">
+                    <label style="margin-bottom: 8px; display: block; font-weight: 500;">Enable Notifications for Projects</label>
+                    <div id="settings-projects-list" style="max-height: 150px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.2);">
+                        <!-- Dynamic project checklist -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="settings-test-btn" class="btn btn-secondary" style="margin-right: auto;">Test Bot</button>
+                <button id="settings-cancel-btn" class="btn btn-ghost">Cancel</button>
+                <button id="settings-save-btn" class="btn btn-primary">Save Settings</button>
             </div>
         </div>
     </div>

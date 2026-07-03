@@ -81,6 +81,16 @@
         newProjectCreateFolder: $('#new-project-create-folder'),
         newProjectPathGroup: $('#new-project-path-group'),
         newProjectPath: $('#new-project-path'),
+        settingsBtn: $('#settings-btn'),
+        settingsModal: $('#settings-modal'),
+        settingsCloseBtn: $('#settings-close-btn'),
+        settingsCancelBtn: $('#settings-cancel-btn'),
+        settingsSaveBtn: $('#settings-save-btn'),
+        settingsBotToken: $('#settings-bot-token'),
+        settingsChatId: $('#settings-chat-id'),
+        settingsDiscoverBtn: $('#settings-discover-btn'),
+        settingsProjectsList: $('#settings-projects-list'),
+        settingsTestBtn: $('#settings-test-btn'),
     };
 
     // --- Toast Notifications ---
@@ -676,6 +686,133 @@
         }
     }
 
+    // --- Settings / Telegram Modal ---
+    let localConfigState = { telegramBotToken: '', telegramChatId: '', enabledProjects: {} };
+
+    async function openSettingsModal() {
+        els.settingsModal.classList.remove('hidden');
+        els.settingsBotToken.value = '';
+        els.settingsChatId.value = '';
+        els.settingsProjectsList.innerHTML = '<div style="text-align: center; color: var(--text-tertiary); padding: 8px;">Loading settings…</div>';
+
+        try {
+            const config = await api('/settings');
+            localConfigState = config;
+            els.settingsBotToken.value = config.telegramBotToken || '';
+            els.settingsChatId.value = config.telegramChatId || '';
+
+            // Render project toggles
+            if (state.projects && state.projects.length > 0) {
+                els.settingsProjectsList.innerHTML = state.projects.map(proj => {
+                    const isChecked = config.enabledProjects[proj.id] === undefined || config.enabledProjects[proj.id] === true;
+                    return `
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; user-select: none; padding: 4px;">
+                            <input type="checkbox" class="settings-project-checkbox" data-project-id="${proj.id}" ${isChecked ? 'checked' : ''} style="width: 14px; height: 14px; accent-color: var(--accent-primary);">
+                            ${proj.name}
+                        </label>
+                    `;
+                }).join('');
+            } else {
+                els.settingsProjectsList.innerHTML = '<div style="text-align: center; color: var(--text-tertiary); padding: 8px; font-size: 0.85rem;">No projects found.</div>';
+            }
+        } catch (err) {
+            showToast(`Failed to load settings: ${err.message}`, 'error');
+            closeSettingsModal();
+        }
+    }
+
+    function closeSettingsModal() {
+        els.settingsModal.classList.add('hidden');
+    }
+
+    async function saveSettings() {
+        const token = els.settingsBotToken.value.trim();
+        const chatId = els.settingsChatId.value.trim();
+        
+        const enabledProjects = {};
+        els.settingsProjectsList.querySelectorAll('.settings-project-checkbox').forEach(cb => {
+            enabledProjects[cb.dataset.projectId] = cb.checked;
+        });
+
+        els.settingsSaveBtn.disabled = true;
+        els.settingsSaveBtn.textContent = 'Saving…';
+
+        try {
+            await api('/settings', {
+                method: 'POST',
+                body: JSON.stringify({
+                    telegramBotToken: token,
+                    telegramChatId: chatId,
+                    enabledProjects
+                })
+            });
+            showToast('Settings saved!', 'success');
+            closeSettingsModal();
+        } catch (err) {
+            showToast(`Failed to save settings: ${err.message}`, 'error');
+        } finally {
+            els.settingsSaveBtn.disabled = false;
+            els.settingsSaveBtn.textContent = 'Save Settings';
+        }
+    }
+
+    async function testTelegramNotification() {
+        const token = els.settingsBotToken.value.trim();
+        const chatId = els.settingsChatId.value.trim();
+
+        if (!token || !chatId) {
+            showToast('Please enter both Bot Token and Chat ID to test', 'error');
+            return;
+        }
+
+        els.settingsTestBtn.disabled = true;
+        els.settingsTestBtn.textContent = 'Testing…';
+
+        try {
+            await api('/settings/test-telegram', {
+                method: 'POST',
+                body: JSON.stringify({ token, chatId })
+            });
+            showToast('Test notification sent! Check Telegram.', 'success');
+        } catch (err) {
+            showToast(`Test failed: ${err.message}`, 'error');
+        } finally {
+            els.settingsTestBtn.disabled = false;
+            els.settingsTestBtn.textContent = 'Test Bot';
+        }
+    }
+
+    async function discoverTelegramChat() {
+        const token = els.settingsBotToken.value.trim();
+        if (!token) {
+            showToast('Please enter your Telegram Bot Token first', 'error');
+            return;
+        }
+
+        els.settingsDiscoverBtn.disabled = true;
+        els.settingsDiscoverBtn.textContent = 'Listening…';
+        showToast('Send a message to your bot on Telegram now...', 'info');
+
+        try {
+            const res = await api('/settings/discover-chat', {
+                method: 'POST',
+                body: JSON.stringify({ token })
+            });
+
+            if (res.success && res.discovery) {
+                els.settingsChatId.value = res.discovery.chatId;
+                showToast(`Found chat with ${res.discovery.firstName || res.discovery.title || 'user'}!`, 'success');
+            } else {
+                showToast(res.message || 'No chat ID found. Try sending a message again.', 'error');
+            }
+        } catch (err) {
+            showToast(`Discovery failed: ${err.message}`, 'error');
+        } finally {
+            els.settingsDiscoverBtn.disabled = false;
+            els.settingsDiscoverBtn.textContent = 'Auto Discover';
+        }
+    }
+
     // --- Auto-resize Input ---
     function autoResizeInput() {
         const textarea = els.messageInput;
@@ -888,6 +1025,31 @@
                 closeSidebar();
             }
         }, { passive: true });
+
+        // Settings / Telegram events
+        if (els.settingsBtn) {
+            els.settingsBtn.addEventListener('click', openSettingsModal);
+        }
+        if (els.settingsCloseBtn) {
+            els.settingsCloseBtn.addEventListener('click', closeSettingsModal);
+        }
+        if (els.settingsCancelBtn) {
+            els.settingsCancelBtn.addEventListener('click', closeSettingsModal);
+        }
+        if (els.settingsSaveBtn) {
+            els.settingsSaveBtn.addEventListener('click', saveSettings);
+        }
+        if (els.settingsTestBtn) {
+            els.settingsTestBtn.addEventListener('click', testTelegramNotification);
+        }
+        if (els.settingsDiscoverBtn) {
+            els.settingsDiscoverBtn.addEventListener('click', discoverTelegramChat);
+        }
+        if (els.settingsModal) {
+            els.settingsModal.addEventListener('click', (e) => {
+                if (e.target === els.settingsModal) closeSettingsModal();
+            });
+        }
     }
 
     // --- Model Quotas ---

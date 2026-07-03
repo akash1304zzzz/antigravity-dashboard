@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { execFileSync, execSync } = require('child_process');
+const https = require('https');
 
 const app = express();
 const PORT = 8080;
@@ -322,6 +323,533 @@ app.get('/api/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
+});
+
+// ---------------------------------------------------------------------------
+// Telegram Integration & Monitoring Settings
+// ---------------------------------------------------------------------------
+const CONFIG_FILE = path.join(__dirname, 'dashboard-config.json');
+
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Error loading config:', err.message);
+  }
+  return { telegramBotToken: '', telegramChatId: '', enabledProjects: {} };
+}
+
+function saveConfig(config) {
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving config:', err.message);
+  }
+}
+
+function sendTelegramMessage(token, chatId, text, replyMarkup = null) {
+  console.log(`[Telegram Debug] Sending message to chat ${chatId}: ${text.replace(/\n/g, ' ')}`);
+  return new Promise((resolve, reject) => {
+    if (!token || !chatId) {
+      return reject(new Error('Bot token and Chat ID are required'));
+    }
+    const payload = {
+      chat_id: chatId,
+      text: text
+    };
+    if (replyMarkup) {
+      payload.reply_markup = replyMarkup;
+    }
+    const data = JSON.stringify(payload);
+
+    const options = {
+      hostname: 'api.telegram.org',
+      port: 443,
+      path: `/bot${token}/sendMessage`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(body);
+          if (json.ok) {
+            resolve(json.result);
+          } else {
+            reject(new Error(json.description || 'Failed to send Telegram message'));
+          }
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.write(data);
+    req.end();
+  });
+}
+
+function discoverChatId(token) {
+  return new Promise((resolve, reject) => {
+    if (!token) return reject(new Error('Bot token is required'));
+    
+    const options = {
+      hostname: 'api.telegram.org',
+      port: 443,
+      path: `/bot${token}/getUpdates?limit=5`,
+      method: 'GET'
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(body);
+          if (!json.ok) {
+            return reject(new Error(json.description || 'Failed to fetch updates'));
+          }
+          const updates = json.result || [];
+          if (updates.length === 0) {
+            return resolve(null);
+          }
+          // Find latest update with a valid chat object
+          for (let i = updates.length - 1; i >= 0; i--) {
+            const update = updates[i];
+            const msg = update.message || update.channel_post || update.edited_message;
+            if (msg && msg.chat && msg.chat.id) {
+              return resolve({
+                chatId: msg.chat.id.toString(),
+                firstName: msg.chat.first_name || '',
+                username: msg.chat.username || '',
+                title: msg.chat.title || ''
+              });
+            }
+          }
+          resolve(null);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.end();
+  });
+}
+
+// Memory cache for transcript monitoring
+const monitoredConversations = {};
+let projectCache = [];
+let lastActiveConvoId = null;
+let lastUpdateId = 0;
+
+function updateProjectCache() {
+  if (!fs.existsSync(PROJECTS_DIR)) return;
+  try {
+    const files = fs.readdirSync(PROJECTS_DIR).filter((f) => f.endsWith('.json'));
+    const tempProjects = [];
+    for (const file of files) {
+      try {
+        const raw = fs.readFileSync(path.join(PROJECTS_DIR, file), 'utf-8');
+        const project = JSON.parse(raw);
+        tempProjects.push(project);
+      } catch (err) {}
+    }
+    projectCache = tempProjects;
+  } catch (err) {}
+}
+
+function formatToolDescription(tc) {
+  const name = tc.name;
+  const args = tc.args || {};
+  
+  if (name === 'run_command') {
+    return `Command - ${args.CommandLine || 'unknown'}`;
+  }
+  if (name === 'write_to_file' || name === 'replace_file_content' || name === 'multi_replace_file_content') {
+    const file = args.TargetFile || args.Path || 'unknown file';
+    const action = name === 'write_to_file' ? 'Create' : 'Edit';
+    return `${action} File - ${path.basename(file)}`;
+  }
+  if (name === 'ask_permission') {
+    return `Permission - ${args.Reason || 'Requires authorization'}`;
+  }
+  if (name === 'ask_question') {
+    return `Question - ${args.Question || 'Clarification needed'}`;
+  }
+  return `Tool - ${name}`;
+}
+
+function getProjectName(projectId) {
+  const p = projectCache.find(proj => proj.id === projectId);
+  return p ? p.name : 'Unknown Project';
+}
+
+function resolveProjectForConvo(convoId) {
+  try {
+    const metaResult = runAgentApi(['agentapi', 'get-conversation-metadata', convoId], true);
+    if (metaResult && metaResult.projectId) {
+      return metaResult.projectId;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function pollTranscripts() {
+  if (!fs.existsSync(BRAIN_DIR)) return;
+  
+  const config = loadConfig();
+  if (!config.telegramBotToken || !config.telegramChatId) return;
+
+  updateProjectCache();
+
+  try {
+    const convoDirs = fs.readdirSync(BRAIN_DIR, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && /^[a-f0-9-]+$/i.test(entry.name));
+
+    for (const dir of convoDirs) {
+      const convoId = dir.name;
+      const transcriptPath = path.join(BRAIN_DIR, convoId, '.system_generated', 'logs', 'transcript.jsonl');
+      
+      if (!fs.existsSync(transcriptPath)) continue;
+
+      let lastLineCount = monitoredConversations[convoId];
+      const content = fs.readFileSync(transcriptPath, 'utf-8');
+      const lines = content.split('\n').filter(l => l.trim().length > 0);
+      
+      // Initialize if we haven't seen this conversation yet
+      if (lastLineCount === undefined) {
+        monitoredConversations[convoId] = lines.length;
+        continue;
+      }
+      if (lastLineCount !== undefined && lines.length < lastLineCount) {
+        console.log(`[Telegram Debug] Convo ${convoId} truncated: reset cache from ${lastLineCount} to ${lines.length}`);
+        monitoredConversations[convoId] = lines.length;
+        lastLineCount = lines.length;
+      }
+
+      if (lines.length > lastLineCount) {
+        console.log(`[Telegram Debug] Convo ${convoId} changed: ${lastLineCount} -> ${lines.length} lines.`);
+        const newLines = lines.slice(lastLineCount);
+        monitoredConversations[convoId] = lines.length;
+
+        const projectId = resolveProjectForConvo(convoId);
+        console.log(`[Telegram Debug] Convo ${convoId} resolved projectId: ${projectId}`);
+        if (!projectId && convoId !== '99999999-9999-9999-9999-999999999999') {
+          console.log(`[Telegram Debug] Skipping non-project convo ${convoId}`);
+          continue;
+        }
+        
+        // Notify if notifications are enabled for this project
+        // If enabledProjects is empty/unset, defaults to enabled
+        const isEnabled = !config.enabledProjects || 
+                          config.enabledProjects[projectId] === undefined || 
+                          config.enabledProjects[projectId] === true;
+        console.log(`[Telegram Debug] Convo ${convoId} project enabled: ${isEnabled}`);
+        if (!isEnabled) continue;
+
+        const projectName = projectId ? getProjectName(projectId) : 'Default Project';
+
+        for (const line of newLines) {
+          try {
+            const entry = JSON.parse(line);
+            console.log(`[Telegram Debug] Parsing step index ${entry.step_index}, type=${entry.type}, status=${entry.status}`);
+            
+            // 1. Check for Errors
+            if (entry.status === 'ERROR') {
+              let errorMsg = entry.content || 'An unexpected error occurred.';
+              errorMsg = stripXmlTags(errorMsg);
+              const cleanMsg = errorMsg.length > 100 ? errorMsg.substring(0, 97) + '...' : errorMsg;
+              
+              const text = `❌ Antigravity Error Alert\n` +
+                           `📁 Project: ${projectName}\n` +
+                           `⚠️ Error: ${cleanMsg}\n` +
+                           `👉 Open dashboard to view.`;
+              
+              console.log(`[Telegram Debug] Triggering error alert payload: ${text.replace(/\n/g, ' ')}`);
+              sendTelegramMessage(config.telegramBotToken, config.telegramChatId, text)
+                .catch(err => console.error('[Telegram Monitoring] Send failed:', err.message));
+            }
+            
+            // 2. Check for proposed tool calls requiring approval
+            if (entry.type === 'PLANNER_RESPONSE' && entry.tool_calls && entry.tool_calls.length > 0) {
+              const hasSensitive = entry.tool_calls.some(tc => 
+                ['run_command', 'write_to_file', 'replace_file_content', 'multi_replace_file_content', 'ask_permission', 'ask_question'].includes(tc.name)
+              );
+              console.log(`[Telegram Debug] Proposed tools: ${entry.tool_calls.map(tc => tc.name).join(', ')}, hasSensitive=${hasSensitive}`);
+
+              if (hasSensitive) {
+                lastActiveConvoId = convoId;
+
+                const pendingTools = entry.tool_calls.map(tc => formatToolDescription(tc)).join(', ');
+                const cleanActionMsg = pendingTools.length > 100 ? pendingTools.substring(0, 97) + '...' : pendingTools;
+
+                const text = `⚠️ Antigravity Action Required\n` +
+                             `📁 Project: ${projectName}\n` +
+                             `🛠️ Action: ${cleanActionMsg}\n` +
+                             `👉 Open dashboard to approve.`;
+
+                const replyMarkup = {
+                  inline_keyboard: [
+                    [
+                      { text: '✓ Allow', callback_data: `allow:${convoId}` },
+                      { text: '✕ Deny', callback_data: `deny:${convoId}` }
+                    ]
+                  ]
+                };
+
+                console.log(`[Telegram Debug] Triggering action required alert payload: ${text.replace(/\n/g, ' ')}`);
+                sendTelegramMessage(config.telegramBotToken, config.telegramChatId, text, replyMarkup)
+                  .catch(err => console.error('[Telegram Monitoring] Send failed:', err.message));
+              }
+            }
+          } catch (e) {}
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Telegram Monitoring] Error polling transcripts:', err.message);
+  }
+}
+
+// Start polling loop every 5 seconds
+setInterval(pollTranscripts, 5000);
+
+function editTelegramMessage(token, chatId, messageId, text) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      text: text
+    });
+    const options = {
+      hostname: 'api.telegram.org',
+      port: 443,
+      path: `/bot${token}/editMessageText`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    };
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => resolve());
+    });
+    req.on('error', err => reject(err));
+    req.write(data);
+    req.end();
+  });
+}
+
+function answerCallbackQuery(token, callbackQueryId, text) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify({
+      callback_query_id: callbackQueryId,
+      text: text
+    });
+    const options = {
+      hostname: 'api.telegram.org',
+      port: 443,
+      path: `/bot${token}/answerCallbackQuery`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    };
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => resolve());
+    });
+    req.on('error', err => reject(err));
+    req.write(data);
+    req.end();
+  });
+}
+
+function startTelegramPolling() {
+  const config = loadConfig();
+  if (!config.telegramBotToken || !config.telegramChatId) {
+    setTimeout(startTelegramPolling, 10000);
+    return;
+  }
+
+  const poll = () => {
+    const currentConfig = loadConfig();
+    const currentToken = currentConfig.telegramBotToken;
+    const currentChatId = currentConfig.telegramChatId;
+
+    if (!currentToken || !currentChatId) {
+      setTimeout(poll, 5000);
+      return;
+    }
+
+    const options = {
+      hostname: 'api.telegram.org',
+      port: 443,
+      path: `/bot${currentToken}/getUpdates?offset=${lastUpdateId}&timeout=10`,
+      method: 'GET'
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', async () => {
+        try {
+          const json = JSON.parse(body);
+          if (json.ok && json.result) {
+            if (json.result.length > 0) {
+              console.log(`[Telegram Debug] Poll received ${json.result.length} new updates.`);
+            }
+            for (const update of json.result) {
+              lastUpdateId = update.update_id + 1;
+              console.log(`[Telegram Debug] Processing update: ID=${update.update_id}, callback=${!!update.callback_query}, message=${!!update.message}`);
+
+              // Handle button clicks
+              if (update.callback_query) {
+                const callback = update.callback_query;
+                const callbackData = callback.data || '';
+                const chat = callback.message.chat;
+                const messageId = callback.message.message_id;
+
+                let action = '';
+                let targetConvoId = '';
+                if (callbackData.startsWith('allow:')) {
+                  action = 'Allow';
+                  targetConvoId = callbackData.replace('allow:', '');
+                } else if (callbackData.startsWith('deny:')) {
+                  action = 'Deny';
+                  targetConvoId = callbackData.replace('deny:', '');
+                }
+
+                if (action && targetConvoId) {
+                  try {
+                    console.log(`[Telegram Debug] Handling callback query: action=${action}, convo=${targetConvoId}`);
+                    if (targetConvoId !== '99999999-9999-9999-9999-999999999999') {
+                      console.log(`[Telegram Debug] Calling agentapi send-message for convo ${targetConvoId}`);
+                      runAgentApi(['agentapi', 'send-message', targetConvoId, action]);
+                    }
+
+                    // Edit original Telegram alert message
+                    const updatedText = callback.message.text + `\n\nResult: ${action === 'Allow' ? 'Allow ✅' : 'Deny ❌'}`;
+                    await editTelegramMessage(currentToken, chat.id, messageId, updatedText);
+
+                    // Acknowledge callback click
+                    await answerCallbackQuery(currentToken, callback.id, `Recorded: ${action}`);
+                    console.log(`[Telegram Debug] Callback action resolved successfully.`);
+                  } catch (err) {
+                    console.error(`[Telegram Debug] Callback handling error:`, err.message);
+                    await answerCallbackQuery(currentToken, callback.id, `Error: ${err.message}`);
+                  }
+                }
+              }
+
+              // Handle typed messages forwarded to conversation context
+              if (update.message && update.message.text) {
+                const messageText = update.message.text;
+                if (messageText.startsWith('/')) continue;
+
+                const convoId = lastActiveConvoId;
+                if (convoId) {
+                  try {
+                    runAgentApi(['agentapi', 'send-message', convoId, messageText]);
+                    await sendTelegramMessage(currentToken, currentChatId, `Forwarded text reply to agent: "${messageText}"`);
+                  } catch (err) {
+                    await sendTelegramMessage(currentToken, currentChatId, `Failed to forward reply: ${err.message}`);
+                  }
+                } else {
+                  await sendTelegramMessage(currentToken, currentChatId, `No active conversation context mapped. Open dashboard to reply.`);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error('[Telegram Polling] Update parsing error:', e.message);
+        }
+        setTimeout(poll, 1500);
+      });
+    });
+
+    req.on('error', (err) => {
+      console.error('[Telegram Polling] Loop network error:', err.message);
+      setTimeout(poll, 5000);
+    });
+    req.end();
+  };
+
+  poll();
+}
+
+// Start Telegram Polling loop
+startTelegramPolling();
+
+// Settings Routes
+app.get('/api/settings', (_req, res) => {
+  const config = loadConfig();
+  res.json(config);
+});
+
+app.post('/api/settings', (req, res) => {
+  try {
+    const { telegramBotToken, telegramChatId, enabledProjects } = req.body;
+    const config = loadConfig();
+
+    if (telegramBotToken !== undefined) config.telegramBotToken = telegramBotToken.trim();
+    if (telegramChatId !== undefined) config.telegramChatId = telegramChatId.trim();
+    if (enabledProjects !== undefined) config.enabledProjects = enabledProjects;
+
+    saveConfig(config);
+    res.json({ success: true, config });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save settings', details: err.message });
+  }
+});
+
+app.post('/api/settings/discover-chat', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ error: 'Bot token is required' });
+    }
+    const discovery = await discoverChatId(token);
+    if (discovery) {
+      res.json({ success: true, discovery });
+    } else {
+      res.json({ success: false, message: 'No messages found. Send a message or start command to your Telegram bot, then try again.' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Discovery failed', details: err.message });
+  }
+});
+
+app.post('/api/settings/test-telegram', async (req, res) => {
+  try {
+    const { token, chatId } = req.body;
+    if (!token || !chatId) {
+      return res.status(400).json({ error: 'Bot token and Chat ID are required' });
+    }
+    const text = `🤖 Antigravity Test Alert\n` +
+                 `📁 Project: Test Configuration\n` +
+                 `✅ Message: Telegram notifications configured!`;
+    
+    await sendTelegramMessage(token, chatId, text);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to send test message', details: err.message });
+  }
 });
 
 // ---------------------------------------------------------------------------
