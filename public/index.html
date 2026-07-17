@@ -115,8 +115,11 @@
                         <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
                     </svg>
                 </button>
-                <div class="top-bar-title">
+                <div class="top-bar-title" style="display: flex; align-items: center; gap: 8px;">
                     <h1 id="page-title">Dashboard</h1>
+                    <span id="live-indicator" class="live-badge" style="display: none;">
+                        <span class="live-dot"></span> Live
+                    </span>
                     <span id="page-subtitle" class="subtitle"></span>
                 </div>
                 <button id="artifacts-btn" class="icon-btn" aria-label="View Artifacts" title="View Artifacts" style="display: none;">
@@ -228,6 +231,32 @@
                             <p>Select a conversation to view</p>
                         </div>
                     </div>
+                    
+                    <!-- Sliding Terminal Drawer -->
+                    <div id="terminal-drawer" class="terminal-drawer collapsed">
+                        <div class="terminal-header">
+                            <div class="terminal-title">
+                                <span class="terminal-status-dot"></span>
+                                <span id="terminal-task-name">Terminal: Idle</span>
+                            </div>
+                            <div class="terminal-controls">
+                                <button id="terminal-toggle-btn" class="icon-btn" aria-label="Toggle terminal" title="Expand/Collapse">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <polyline points="18 15 12 9 6 15"></polyline>
+                                    </svg>
+                                </button>
+                                <button id="terminal-clear-btn" class="icon-btn" aria-label="Clear terminal" title="Clear logs">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="terminal-body" class="terminal-body">
+                            <div class="terminal-line system-msg">> Live logs from background command execution will appear here...</div>
+                        </div>
+                    </div>
+
                     <div class="chat-input-bar">
                         <div id="quick-actions-bar" style="display: flex; gap: 8px; margin-bottom: 8px; overflow-x: auto; padding-bottom: 4px;">
                             <button class="btn btn-ghost quick-action-btn" onclick="document.getElementById('message-input').value='Allow'; document.getElementById('send-btn').click();" style="padding: 4px 10px; font-size: 0.75rem; background: rgba(0, 255, 128, 0.1); color: #4ade80; border: 1px solid #4ade80;">✓ Allow</button>
@@ -405,6 +434,7 @@
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
 
+    <script src="socket.io.min.js"></script>
     <script src="app.js?v=3.8"></script>
 </body>
 </html>

@@ -19,6 +19,150 @@
     // --- Auth Header ---
     const AUTH_HEADER = 'Basic ' + btoa('admin:AntiGravity2025!');
 
+    let socket = null;
+
+    function initSocket() {
+        if (socket) return;
+        
+        console.log('[Socket] Initializing connection...');
+        socket = io({
+            auth: {
+                token: AUTH_HEADER
+            },
+            autoConnect: false
+        });
+        
+        socket.on('connect', () => {
+            console.log('[Socket] Connected to server');
+            const liveInd = $('#live-indicator');
+            if (liveInd) liveInd.style.display = 'inline-flex';
+            
+            if (state.currentConversationId) {
+                socket.emit('subscribe', state.currentConversationId);
+            }
+        });
+        
+        socket.on('disconnect', (reason) => {
+            console.log('[Socket] Disconnected:', reason);
+            const liveInd = $('#live-indicator');
+            if (liveInd) liveInd.style.display = 'none';
+        });
+        
+        socket.on('connect_error', (err) => {
+            console.error('[Socket] Connection error:', err.message);
+            const liveInd = $('#live-indicator');
+            if (liveInd) liveInd.style.display = 'none';
+        });
+        
+        socket.on('new-steps', (steps) => {
+            console.log(`[Socket] Received ${steps.length} new steps`);
+            appendNewSteps(steps);
+        });
+        
+        socket.on('task-output', (data) => {
+            console.log('[Socket] Task output:', data.taskId);
+            handleTaskOutput(data.taskId, data.chunk);
+        });
+        
+        socket.on('error-msg', (msg) => {
+            showToast(msg, 'error');
+        });
+        
+        socket.connect();
+    }
+
+    function showThinkingIndicator() {
+        removeThinkingIndicator();
+        
+        const thinkingDiv = document.createElement('div');
+        thinkingDiv.id = 'socket-thinking-indicator';
+        thinkingDiv.className = 'processing-indicator';
+        thinkingDiv.innerHTML = `
+            <div class="splash-orbit" style="width: 14px; height: 14px;">
+                <div class="orbit-core" style="width: 4px; height: 4px;"></div>
+            </div>
+            Antigravity is thinking…
+        `;
+        els.chatMessages.appendChild(thinkingDiv);
+        els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+    }
+
+    function removeThinkingIndicator() {
+        const indicator = document.getElementById('socket-thinking-indicator');
+        if (indicator) indicator.remove();
+        document.querySelectorAll('.processing-indicator').forEach(el => el.remove());
+    }
+
+    // --- Sliding Terminal Controls ---
+    let isTerminalExpanded = false;
+    let currentActiveTaskId = null;
+
+    function toggleTerminal(forceExpand = null) {
+        const drawer = $('#terminal-drawer');
+        if (!drawer) return;
+        
+        if (forceExpand !== null) {
+            isTerminalExpanded = forceExpand;
+        } else {
+            isTerminalExpanded = !isTerminalExpanded;
+        }
+        
+        drawer.classList.toggle('expanded', isTerminalExpanded);
+        drawer.classList.toggle('collapsed', !isTerminalExpanded);
+    }
+
+    function handleTaskOutput(taskId, chunk) {
+        const body = $('#terminal-body');
+        const statusDot = $('.terminal-status-dot');
+        const taskName = $('#terminal-task-name');
+        
+        if (!body) return;
+        
+        if (currentActiveTaskId !== taskId) {
+            if (currentActiveTaskId !== null) {
+                const sep = document.createElement('div');
+                sep.className = 'terminal-line system-msg';
+                sep.textContent = `--- Task ${taskId} started ---`;
+                body.appendChild(sep);
+            }
+            currentActiveTaskId = taskId;
+            toggleTerminal(true);
+        }
+        
+        if (statusDot) {
+            statusDot.classList.add('active');
+            statusDot.classList.remove('idle');
+        }
+        if (taskName) {
+            taskName.textContent = `Terminal: task-${taskId} (Running)`;
+        }
+        
+        const helpLine = body.querySelector('.system-msg');
+        if (helpLine && helpLine.textContent.includes('Live logs')) {
+            helpLine.remove();
+        }
+        
+        const line = document.createElement('div');
+        line.className = 'terminal-line';
+        line.textContent = chunk;
+        body.appendChild(line);
+        body.scrollTop = body.scrollHeight;
+    }
+
+    function resetTerminalStatus(completed = true) {
+        const statusDot = $('.terminal-status-dot');
+        const taskName = $('#terminal-task-name');
+        
+        if (statusDot) {
+            statusDot.classList.remove('active');
+            statusDot.classList.add('idle');
+        }
+        if (taskName) {
+            taskName.textContent = completed ? 'Terminal: Idle (Completed)' : 'Terminal: Idle';
+        }
+        currentActiveTaskId = null;
+    }
+
     // --- API Helper ---
     async function api(endpoint, options = {}) {
         const url = `/api${endpoint}`;
@@ -330,6 +474,17 @@
 
     // --- Open Conversation ---
     async function openConversation(id) {
+        if (state.currentConversationId && socket) {
+            socket.emit('unsubscribe', state.currentConversationId);
+        }
+
+        const termBody = document.getElementById('terminal-body');
+        if (termBody) {
+            termBody.innerHTML = '<div class="terminal-line system-msg">> Live logs from background command execution will appear here...</div>';
+        }
+        resetTerminalStatus(false);
+        toggleTerminal(false); // Collapse terminal on convo switch
+
         state.currentConversationId = id;
         closeSidebar();
         switchView('chat');
@@ -366,6 +521,9 @@
                 api(`/conversations/${id}/artifacts`).catch(() => [])
             ]);
             renderMessages(steps, artifacts);
+            if (socket) {
+                socket.emit('subscribe', id);
+            }
         } catch (err) {
             console.error('Failed to load conversation:', err);
             els.chatMessages.innerHTML = `
@@ -427,9 +585,11 @@
             const content = cleanContent(step.content);
             if (!content) return '';
 
+            const stepIdAttr = `id="step-${step.step_index ?? ''}"`;
+
             if (step.type === 'USER_INPUT') {
                 return `
-                    <div class="message message-user">
+                    <div class="message message-user" ${stepIdAttr}>
                         <div>${escapeHtml(truncate(content, 2000))}</div>
                         <div class="message-meta">${formatDateTime(step.created_at)}</div>
                     </div>
@@ -438,7 +598,7 @@
 
             if (step.type === 'PLANNER_RESPONSE') {
                 let msgHtml = `
-                    <div class="message message-assistant">
+                    <div class="message message-assistant" ${stepIdAttr}>
                         <div>${formatMarkdown(content)}</div>
                 `;
 
@@ -476,6 +636,67 @@
             setTimeout(scrollToBottom, 100);
             setTimeout(scrollToBottom, 500);
         });
+    }
+
+    function appendNewSteps(newSteps) {
+        removeThinkingIndicator();
+        resetTerminalStatus(true);
+        
+        document.querySelectorAll('.message-user').forEach(el => {
+            const meta = el.querySelector('.message-meta');
+            if (meta && (meta.textContent.includes('Sending') || meta.textContent.includes('Sent'))) {
+                el.remove();
+            }
+        });
+
+        let anchor = document.getElementById('chat-anchor');
+        if (!anchor) {
+            anchor = document.createElement('div');
+            anchor.id = 'chat-anchor';
+            anchor.style.height = '1px';
+            els.chatMessages.appendChild(anchor);
+        }
+
+        newSteps.forEach(step => {
+            const stepId = `step-${step.step_index}`;
+            if (document.getElementById(stepId)) return;
+
+            const content = cleanContent(step.content);
+            if (!content) return;
+
+            const stepDiv = document.createElement('div');
+            stepDiv.id = stepId;
+
+            if (step.type === 'USER_INPUT') {
+                stepDiv.className = 'message message-user';
+                stepDiv.innerHTML = `
+                    <div>${escapeHtml(truncate(content, 2000))}</div>
+                    <div class="message-meta">${formatDateTime(step.created_at)}</div>
+                `;
+            } else if (step.type === 'PLANNER_RESPONSE') {
+                stepDiv.className = 'message message-assistant';
+                let msgHtml = `<div>${formatMarkdown(content)}</div>`;
+
+                if (step.thinking) {
+                    msgHtml += `<details class="message-thinking"><summary>💭 Thinking…</summary><div>${escapeHtml(step.thinking)}</div></details>`;
+                }
+
+                if (step.tool_calls && step.tool_calls.length > 0) {
+                    const toolSummary = step.tool_calls.map(tc => `<span class="tool-call-name">${tc.name}</span>`).join(', ');
+                    msgHtml += `<details class="message-tool-calls"><summary>🔧 Tools: ${toolSummary}</summary><div>${escapeHtml(JSON.stringify(step.tool_calls, null, 2))}</div></details>`;
+                }
+
+                msgHtml += `<div class="message-meta">${formatDateTime(step.created_at)}</div>`;
+                stepDiv.innerHTML = msgHtml;
+            } else {
+                return;
+            }
+
+            els.chatMessages.insertBefore(stepDiv, anchor);
+            currentStepCount++;
+        });
+
+        anchor.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
 
     // --- Escape HTML ---
@@ -564,8 +785,12 @@
             });
             msgDiv.querySelector('.message-meta').textContent = 'Sent ✓';
             
-            // Poll for the agent's response
-            pollForResponse(state.currentConversationId, currentStepCount + 2);
+            if (!socket || !socket.connected) {
+                // Fallback to polling
+                pollForResponse(state.currentConversationId, currentStepCount + 2);
+            } else {
+                showThinkingIndicator();
+            }
         } catch (err) {
             msgDiv.querySelector('.message-meta').textContent = 'Failed to send';
             msgDiv.querySelector('.message-meta').style.color = 'var(--error)';
@@ -1003,6 +1228,33 @@
         });
         els.sendBtn.addEventListener('click', sendMessage);
 
+        // Terminal Drawer Events
+        const termHeader = document.querySelector('.terminal-header');
+        const termToggleBtn = document.getElementById('terminal-toggle-btn');
+        const termClearBtn = document.getElementById('terminal-clear-btn');
+        const termBody = document.getElementById('terminal-body');
+
+        if (termHeader) {
+            termHeader.addEventListener('click', (e) => {
+                if (termClearBtn && termClearBtn.contains(e.target)) return;
+                toggleTerminal();
+            });
+        }
+        if (termToggleBtn) {
+            termToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleTerminal();
+            });
+        }
+        if (termClearBtn) {
+            termClearBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (termBody) {
+                    termBody.innerHTML = '<div class="terminal-line system-msg">> Terminal cleared</div>';
+                }
+            });
+        }
+
         // Back to dashboard on title click when in chat
         els.pageTitle.addEventListener('click', () => {
             if (state.currentView === 'chat') {
@@ -1097,6 +1349,7 @@
         // Load data
         await Promise.all([loadProjects(), loadConversations()]);
         renderModelQuotas();
+        initSocket();
 
         // Fade out splash
         setTimeout(() => {

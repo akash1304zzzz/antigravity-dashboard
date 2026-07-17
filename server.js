@@ -5,8 +5,18 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { execFileSync, execSync } = require('child_process');
 const https = require('https');
+const http = require('http');
+const socketIo = require('socket.io');
+const chokidar = require('chokidar');
 
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
 const PORT = 8080;
 
 // ---------------------------------------------------------------------------
@@ -853,6 +863,235 @@ app.post('/api/settings/test-telegram', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Socket.IO WebSocket Streaming Server
+// ---------------------------------------------------------------------------
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token || socket.handshake.headers.authorization;
+  if (!token) {
+    return next(new Error('Authentication error: Missing token'));
+  }
+  
+  let credentials = '';
+  if (token.startsWith('Basic ')) {
+    credentials = Buffer.from(token.slice(6), 'base64').toString();
+  } else {
+    credentials = Buffer.from(token, 'base64').toString();
+  }
+  
+  const [user, pass] = credentials.split(':');
+  if (user === AUTH_USER && pass === AUTH_PASS) {
+    return next();
+  }
+  return next(new Error('Authentication error: Invalid credentials'));
+});
+
+const activeWatchers = {};
+
+io.on('connection', (socket) => {
+  console.log(`[Socket] Client connected: ${socket.id}`);
+  
+  socket.on('subscribe', (conversationId) => {
+    if (!/^[a-f0-9-]+$/i.test(conversationId)) {
+      return socket.emit('error-msg', 'Invalid conversation ID format');
+    }
+    
+    const transcriptPath = path.join(
+      BRAIN_DIR, conversationId,
+      '.system_generated', 'logs', 'transcript.jsonl'
+    );
+    
+    if (!fs.existsSync(transcriptPath)) {
+      return socket.emit('error-msg', 'Conversation not found');
+    }
+    
+    socket.join(`convo-${conversationId}`);
+    console.log(`[Socket] Client ${socket.id} subscribed to conversation: ${conversationId}`);
+    
+    if (!activeWatchers[conversationId]) {
+      console.log(`[Socket] Creating file watcher for conversation: ${conversationId}`);
+      
+      let lastByteOffset = 0;
+      try {
+        const stats = fs.statSync(transcriptPath);
+        lastByteOffset = stats.size;
+      } catch (err) {
+        console.error(`[Socket] Error getting stats for ${conversationId}:`, err);
+      }
+      
+      const watcher = chokidar.watch(transcriptPath, {
+        usePolling: true,
+        interval: 500,
+        binaryInterval: 1000,
+        ignoreInitial: true,
+        depth: 0
+      });
+      
+      watcher.on('change', () => {
+        handleTranscriptChange(conversationId, transcriptPath);
+      });
+      
+      watcher.on('error', (err) => {
+        console.error(`[Socket] Watcher error for ${conversationId}:`, err);
+      });
+      
+      // Setup tasks directory watcher
+      const tasksDir = path.join(BRAIN_DIR, conversationId, '.system_generated', 'tasks');
+      fs.mkdirSync(tasksDir, { recursive: true });
+      
+      console.log(`[Socket] Creating tasks watcher for conversation: ${conversationId}`);
+      const tasksWatcher = chokidar.watch(tasksDir, {
+        usePolling: true,
+        interval: 500,
+        binaryInterval: 1000,
+        ignoreInitial: true,
+        depth: 0
+      });
+      
+      const taskOffsets = {};
+      
+      tasksWatcher.on('all', (event, filePath) => {
+        if (!filePath.endsWith('.log')) return;
+        
+        const filename = path.basename(filePath);
+        const taskId = filename.replace('.log', '');
+        
+        if (event === 'add' || event === 'change') {
+          handleTaskLogChange(conversationId, taskId, filePath, taskOffsets);
+        }
+      });
+      
+      activeWatchers[conversationId] = {
+        watcher,
+        tasksWatcher,
+        clients: new Set([socket.id]),
+        lastByteOffset
+      };
+    } else {
+      activeWatchers[conversationId].clients.add(socket.id);
+    }
+  });
+  
+  socket.on('unsubscribe', (conversationId) => {
+    handleUnsubscribe(socket, conversationId);
+  });
+  
+  socket.on('disconnect', () => {
+    console.log(`[Socket] Client disconnected: ${socket.id}`);
+    for (const conversationId of Object.keys(activeWatchers)) {
+      if (activeWatchers[conversationId].clients.has(socket.id)) {
+        handleUnsubscribe(socket, conversationId);
+      }
+    }
+  });
+});
+
+function handleUnsubscribe(socket, conversationId) {
+  socket.leave(`convo-${conversationId}`);
+  console.log(`[Socket] Client ${socket.id} unsubscribed from conversation: ${conversationId}`);
+  
+  const watcherInfo = activeWatchers[conversationId];
+  if (watcherInfo) {
+    watcherInfo.clients.delete(socket.id);
+    if (watcherInfo.clients.size === 0) {
+      console.log(`[Socket] Cleaning up inactive file watchers for conversation: ${conversationId}`);
+      if (watcherInfo.watcher) watcherInfo.watcher.close();
+      if (watcherInfo.tasksWatcher) watcherInfo.tasksWatcher.close();
+      delete activeWatchers[conversationId];
+    }
+  }
+}
+
+function handleTranscriptChange(conversationId, transcriptPath) {
+  const watcherInfo = activeWatchers[conversationId];
+  if (!watcherInfo) return;
+  
+  try {
+    const stats = fs.statSync(transcriptPath);
+    const newSize = stats.size;
+    const oldOffset = watcherInfo.lastByteOffset;
+    
+    if (newSize <= oldOffset) {
+      watcherInfo.lastByteOffset = newSize;
+      return;
+    }
+    
+    const buffer = Buffer.alloc(newSize - oldOffset);
+    const fd = fs.openSync(transcriptPath, 'r');
+    fs.readSync(fd, buffer, 0, buffer.length, oldOffset);
+    fs.closeSync(fd);
+    
+    watcherInfo.lastByteOffset = newSize;
+    
+    const chunk = buffer.toString('utf-8');
+    const lines = chunk.split('\n').filter(l => l.trim().length > 0);
+    const newSteps = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      try {
+        const entry = JSON.parse(lines[i]);
+        const type = entry.type || '';
+        
+        if (type !== 'USER_INPUT' && type !== 'PLANNER_RESPONSE') continue;
+        
+        let messageContent = entry.content || '';
+        messageContent = stripXmlTags(messageContent);
+        
+        newSteps.push({
+          step_index: entry.step_index ?? (Date.now() + i),
+          source: entry.source || null,
+          type,
+          status: entry.status || null,
+          created_at: entry.created_at || null,
+          content: messageContent,
+          thinking: entry.thinking || null,
+          tool_calls: entry.tool_calls || null,
+        });
+      } catch (parseErr) {
+        // Ignore JSON parsing errors for partial lines
+      }
+    }
+    
+    if (newSteps.length > 0) {
+      console.log(`[Socket] Emitting ${newSteps.length} new steps to convo-${conversationId}`);
+      io.to(`convo-${conversationId}`).emit('new-steps', newSteps);
+    }
+  } catch (err) {
+    console.error(`[Socket] Error reading transcript change for ${conversationId}:`, err);
+  }
+}
+
+function handleTaskLogChange(conversationId, taskId, filePath, taskOffsets) {
+  try {
+    const stats = fs.statSync(filePath);
+    const newSize = stats.size;
+    const oldOffset = taskOffsets[filePath] || 0;
+    
+    if (newSize <= oldOffset) {
+      taskOffsets[filePath] = newSize;
+      return;
+    }
+    
+    const buffer = Buffer.alloc(newSize - oldOffset);
+    const fd = fs.openSync(filePath, 'r');
+    fs.readSync(fd, buffer, 0, buffer.length, oldOffset);
+    fs.closeSync(fd);
+    
+    taskOffsets[filePath] = newSize;
+    
+    const chunk = buffer.toString('utf-8');
+    if (chunk.trim().length > 0) {
+      console.log(`[Socket] Emitting task log delta for ${taskId} in convo-${conversationId}`);
+      io.to(`convo-${conversationId}`).emit('task-output', {
+        taskId,
+        chunk
+      });
+    }
+  } catch (err) {
+    console.error(`[Socket] Error reading task log change for ${taskId}:`, err.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/projects
 // ---------------------------------------------------------------------------
 app.get('/api/projects', (_req, res) => {
@@ -1244,7 +1483,7 @@ app.get('*', (_req, res) => {
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
-app.listen(PORT, () => {
-  console.log(`Antigravity Mobile Dashboard server running on http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Antigravity Mobile Dashboard server running on http://0.0.0.0:${PORT}`);
   console.log(`Static files served from: ${path.join(__dirname, 'public')}`);
 });
